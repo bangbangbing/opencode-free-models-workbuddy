@@ -25,7 +25,7 @@ if (!fmMatch) {
   fm.includes('name:') ? ok('name') : bad('缺少 name')
   fm.includes('description:') ? ok('description') : bad('缺少 description')
   fm.includes('agent_created: true') ? ok('agent_created: true') : bad('缺少 agent_created: true')
-  /Triggers:/.test(fm) ? ok('description 含 Triggers') : bad('description 缺少 Triggers')
+  fm.includes('Triggers:') ? ok('description 含 Triggers') : bad('description 缺少 Triggers')
 }
 
 console.log('必需文件')
