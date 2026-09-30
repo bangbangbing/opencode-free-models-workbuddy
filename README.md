@@ -139,10 +139,31 @@ bash scripts/install-launchd.sh
 launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
 ```
 
+## 打包与发布（WorkBuddy 技能市场）
+
+WorkBuddy 的发布要求：一个 **ZIP**，内部顶层是**一个以技能名命名的文件夹**，其中包含 `SKILL.md`
+（可选 `scripts/`、`references/`、`assets/`）。官方校验规则（`quick_validate.py`）：`SKILL.md` 必须有
+YAML frontmatter，`name` 为 hyphen-case，`description` 不含尖括号 `<` `>`。
+
+```bash
+bash scripts/package-skill.sh
+# → dist/opencode-free-models-workbuddy.zip
+# 目录：opencode-free-models-workbuddy/{SKILL.md,scripts/,references/,assets/,...}
+```
+
+脚本会：① 只 stage 技能内容（排除 `.git`/`.github`/`dist` 等）；② 若存在官方
+`skill-creator/scripts/quick_validate.py` 则先跑官方校验；③ 用 `zip` 产出 `dist/<name>.zip`。
+
+> 等价官方方式：`python3 <WorkBuddy>/…/skill-creator/scripts/package_skill.py <skill-dir> dist`
+> （注意它会连 `.git` 一起打包，建议先 stage 干净副本，本仓库的脚本已处理这一点。）
+
+**发布**：把 `dist/<name>.zip` 上传到 WorkBuddy 技能市场；GitHub 侧把它作为 **Release 附件**（`v1.0.0`）。
+
 ## 开发
 
 ```bash
-npm run validate     # 校验 SKILL.md frontmatter + 脚本语法
+npm run validate             # 校验 SKILL.md frontmatter + 脚本语法
+bash scripts/package-skill.sh   # 打包成技能市场可用的 zip
 ```
 
 ## 故障排查

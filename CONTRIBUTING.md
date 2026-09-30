@@ -19,6 +19,16 @@ node scripts/validate-skill.mjs   # must pass
 
 Update `CHANGELOG.md` for user-visible changes.
 
+## Releasing
+
+1. Update `CHANGELOG.md`.
+2. Validate: `node scripts/validate-skill.mjs`.
+3. Package for the WorkBuddy marketplace: `bash scripts/package-skill.sh` → `dist/<name>.zip`.
+4. Tag and push, then attach the zip to the GitHub Release:
+   ```bash
+   git tag -a vX.Y.Z -m "vX.Y.Z" && git push --follow-tags
+   ```
+
 ## Adding a new script
 
 1. Put it in `scripts/`.
