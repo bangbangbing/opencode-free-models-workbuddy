@@ -1,0 +1,24 @@
+Third-party notices
+===================
+
+This project reuses, WITHOUT modification, the core server-side modules of:
+
+  dsh-opencode-xdbridge
+  https://github.com/XDTrees/dsh-opencode-xdbridge
+  License: MIT
+  Copyright (c) XDTrees
+
+Specifically, scripts/bridge.mjs imports at runtime the following modules from
+that package (located via $DSH_HOME/profiles/*/node_modules/dsh-opencode-xdbridge/lib
+or OPENCODE_BRIDGE_PLUGIN_LIB):
+
+  - runtime.js          (isolated `opencode serve` launcher)
+  - backend.js          (one inference turn; free-model catalog)
+  - protocol.js         (OpenAI <-> JSON-envelope translation)
+  - context-budget.js   (usable context window)
+
+No files from that project are copied into this repository; they are consumed
+as a dependency at runtime. Their MIT license and copyright remain in force.
+
+OpenCode itself (the `opencode` binary) is a separate project by its own
+authors and is not redistributed here.
