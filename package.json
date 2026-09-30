@@ -1,0 +1,36 @@
+{
+  "name": "opencode-free-models-workbuddy",
+  "version": "1.0.0",
+  "description": "Bridge OpenCode Zen's free models into WorkBuddy through a local, isolated OpenCode runtime.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "workbuddy",
+    "skill",
+    "opencode",
+    "opencode-zen",
+    "free-models",
+    "openai-compatible",
+    "bridge"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "validate": "node scripts/validate-skill.mjs",
+    "test": "node scripts/validate-skill.mjs",
+    "bridge": "node scripts/bridge.mjs",
+    "sync": "node scripts/sync-workbuddy-models.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md",
+    "scripts",
+    "references",
+    "assets"
+  ]
+}

@@ -1,44 +1,77 @@
+<div align="center">
+
 # opencode-free-models-workbuddy
 
-把 [OpenCode Zen](https://opencode.ai) 的**免费模型**接入 **WorkBuddy**（也适用于任何支持
-自定义 OpenAI 兼容端点的客户端）。
+**把 [OpenCode Zen](https://opencode.ai) 的免费模型接入 [WorkBuddy](https://www.workbuddy.cn)
+（也适用于任何支持自定义 OpenAI 兼容端点的客户端）。**
 
-> Bridge OpenCode Zen's free models into WorkBuddy through a local, isolated
-> OpenCode runtime and a fixed-port OpenAI-compatible endpoint.
+通过一个本地、隔离的 OpenCode 运行时和固定端口的 OpenAI 兼容端点完成桥接。
 
-## 原理
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24-brightgreen.svg)](package.json)
+[![validate](https://github.com/OWNER/REPO/actions/workflows/validate.yml/badge.svg?branch=main)](../../actions/workflows/validate.yml)
+<!-- 发布后把上面的 OWNER/REPO 换成你的 GitHub 用户名/仓库名 -->
 
-OpenCode Zen 的免费档有服务端门禁，直连会被拒：
+</div>
+
+---
+
+## 为什么需要它
+
+OpenCode Zen 的免费档有服务端门禁，直连会被拒绝：
 
 ```
 FreeTierError: OpenCode's free tier can only be used from within OpenCode
 ```
 
-改 User-Agent 无效，必须由**真实的 opencode 进程**发起。本工具因此：
+改 `User-Agent` 无效（判据不是 UA），必须由**真实的 opencode 进程**发起。本工具因此：
 
-1. 启动一个**隔离的** `opencode serve`（独立 XDG 根 + 随机密码 + `permission:{'*':'ask'}`），
+1. 启动一个**隔离的** `opencode serve`（独立 XDG 根 + 随机密码 + `permission:{'*':'ask'}`）——
    门禁放行，但本地不执行任何动作；
 2. 在 `127.0.0.1:<port>` 暴露 **OpenAI 兼容** `/v1/chat/completions`（含 SSE 流式）；
 3. 把读到的**计费为 0** 的模型写进 WorkBuddy 的 `models.json`（`vendor: "Custom"`）。
 
 ```
-WorkBuddy ──HTTP──> 127.0.0.1:3199 (bridge.mjs) ──HTTP──> isolated opencode serve ──> OpenCode Zen
+WorkBuddy ──HTTP──▶ 127.0.0.1:3199 (bridge.mjs) ──HTTP──▶ isolated opencode serve ──▶ OpenCode Zen
+```
+
+## 安装
+
+### 作为 WorkBuddy 技能
+
+```bash
+git clone https://github.com/OWNER/REPO.git \
+  ~/.workbuddy/skills/opencode-free-models-workbuddy
+```
+
+之后用自然语言触发即可，例如「把 opencode 免费模型接到 workbuddy」「同步免费模型」「验证桥接」。
+
+### 作为独立工具
+
+```bash
+git clone https://github.com/OWNER/REPO.git && cd REPO
 ```
 
 ## 前置条件
 
-- **Node** `^22.19 || >=24`
-- **opencode 二进制**：本机已有，或允许联网下载（约 57MB）
-- **`dsh-opencode-xdbridge` 插件核心模块**（复用其 bridge 逻辑，MIT）。解析顺序：
-  1. `OPENCODE_BRIDGE_PLUGIN_LIB`
-  2. `$DSH_HOME/profiles/*/node_modules/dsh-opencode-xdbridge/lib`
-  3. 缺失时先安装：
-     ```bash
-     dsh plugin --profile <profile> add github:XDTrees/dsh-opencode-xdbridge
-     # 或者
-     git clone https://github.com/XDTrees/dsh-opencode-xdbridge
-     export OPENCODE_BRIDGE_PLUGIN_LIB="$PWD/dsh-opencode-xdbridge/lib"
-     ```
+| 依赖 | 说明 |
+| --- | --- |
+| **Node** | `^22.19 \|\| >=24` |
+| **opencode 二进制** | 本机已有，或允许联网下载（约 57 MB，sha512 校验） |
+| **`dsh-opencode-xdbridge` 核心模块** | 复用其 bridge 逻辑（MIT）。解析顺序见下 |
+
+`dsh-opencode-xdbridge` 解析顺序：
+
+1. 环境变量 `OPENCODE_BRIDGE_PLUGIN_LIB`
+2. `$DSH_HOME/profiles/*/node_modules/dsh-opencode-xdbridge/lib`（已装 DSH 插件时直接用）
+3. 都没有时先安装：
+
+```bash
+dsh plugin --profile <profile> add github:XDTrees/dsh-opencode-xdbridge
+# 或者
+git clone https://github.com/XDTrees/dsh-opencode-xdbridge
+export OPENCODE_BRIDGE_PLUGIN_LIB="$PWD/dsh-opencode-xdbridge/lib"
+```
 
 ## 快速开始
 
@@ -60,16 +93,24 @@ node scripts/sync-workbuddy-models.mjs
 node scripts/verify.mjs
 ```
 
-## 作为 WorkBuddy 技能使用
+## 仓库结构
 
-把本仓库放进 WorkBuddy 用户技能目录即可被识别（技能库）：
-
-```bash
-git clone <this-repo> ~/.workbuddy/skills/opencode-free-models-workbuddy
 ```
-
-之后用自然语言触发，例如「把 opencode 免费模型接到 workbuddy」「同步免费模型」「验证桥接」。
-（`SKILL.md` 已带 `agent_created: true` 与触发词。）
+.
+├── SKILL.md                  # WorkBuddy 技能定义（frontmatter + 工作流）
+├── README.md  LICENSE  NOTICE  CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
+├── package.json              # 元数据 + npm scripts
+├── scripts/
+│   ├── bridge.mjs            # 隔离运行时 + OpenAI 兼容端点（便携，自动探测）
+│   ├── sync-workbuddy-models.mjs
+│   ├── verify.mjs
+│   ├── validate-skill.mjs    # 本仓库自检（CI 也跑）
+│   ├── run-bridge.sh
+│   └── install-launchd.sh
+├── references/troubleshooting.md
+├── assets/com.workbuddy.opencode-bridge.plist.template
+└── .github/                  # CI + issue/PR 模板
+```
 
 ## 配置（环境变量）
 
@@ -91,11 +132,17 @@ git clone <this-repo> ~/.workbuddy/skills/opencode-free-models-workbuddy
 | POST | `/admin/refresh` | 重读上游免费模型清单 |
 | POST | `/v1/chat/completions` | 聊天补全（支持 `stream:true`） |
 
-## 开机自启
+## 开机自启（macOS）
 
 ```bash
 bash scripts/install-launchd.sh
 launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
+```
+
+## 开发
+
+```bash
+npm run validate     # 校验 SKILL.md frontmatter + 脚本语法
 ```
 
 ## 故障排查
@@ -104,7 +151,7 @@ launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
 
 ## 许可与致谢
 
-MIT。桥接逻辑复用 [dsh-opencode-xdbridge](https://github.com/XDTrees/dsh-opencode-xdbridge)
-（MIT，作者 XDTrees）的核心模块，未修改其源码；详见 [`NOTICE`](NOTICE)。
+MIT，详见 [`LICENSE`](LICENSE)。桥接逻辑**复用** [dsh-opencode-xdbridge](https://github.com/XDTrees/dsh-opencode-xdbridge)
+（MIT，作者 XDTrees）的核心模块，**未修改其源码**，详见 [`NOTICE`](NOTICE)。
 
 免费模型由 OpenCode Zen 提供，清单与额度随上游变化。本项目与 OpenCode / WorkBuddy 官方无隶属关系。
