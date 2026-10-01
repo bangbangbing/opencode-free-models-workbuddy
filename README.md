@@ -98,17 +98,20 @@ node scripts/verify.mjs
 ```
 .
 ├── SKILL.md                  # WorkBuddy 技能定义（frontmatter + 工作流）
-├── README.md  LICENSE  NOTICE  CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
+├── README.md  PUBLISHING.md  LICENSE  NOTICE  CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
 ├── package.json              # 元数据 + npm scripts
 ├── scripts/
 │   ├── bridge.mjs            # 隔离运行时 + OpenAI 兼容端点（便携，自动探测）
 │   ├── sync-workbuddy-models.mjs
 │   ├── verify.mjs
-│   ├── validate-skill.mjs    # 本仓库自检（CI 也跑）
+│   ├── validate-skill.mjs    # 本仓库自检 + 市场导入规则（CI 也跑）
+│   ├── package-skill.sh      # 打出完整包 + 市场精简包
 │   ├── run-bridge.sh
 │   └── install-launchd.sh
 ├── references/troubleshooting.md
-├── assets/com.workbuddy.opencode-bridge.plist.template
+├── assets/
+│   ├── icon.png              # 512×512 技能图标（上架时单独上传）
+│   └── com.workbuddy.opencode-bridge.plist.template
 └── .github/                  # CI + issue/PR 模板
 ```
 
@@ -147,17 +150,26 @@ YAML frontmatter，`name` 为 hyphen-case，`description` 不含尖括号 `<` `>
 
 ```bash
 bash scripts/package-skill.sh
-# → dist/opencode-free-models-workbuddy.zip
-# 目录：opencode-free-models-workbuddy/{SKILL.md,scripts/,references/,assets/,...}
+# → dist/opencode-free-models-workbuddy.zip             完整包（GitHub Release / 直接分享）
+# → dist/opencode-free-models-workbuddy.marketplace.zip 精简包（上架 SkillHub 用这个）
 ```
 
 脚本会：① 只 stage 技能内容（排除 `.git`/`.github`/`dist` 等）；② 若存在官方
-`skill-creator/scripts/quick_validate.py` 则先跑官方校验；③ 用 `zip` 产出 `dist/<name>.zip`。
+`skill-creator/scripts/quick_validate.py` 则先跑官方校验；③ 用 `zip` 产出两个 zip。
+
+**为什么要两个 zip**：WorkBuddy 市场导入管线有白名单，**只保留** `SKILL.md`、`references/`、
+`scripts/`，其余（`README.md`、`LICENSE`、`NOTICE`、`CHANGELOG.md`、`assets/`）会作为
+`non_standard_files` 被删除。精简包先自行剔除，免得审核端看到"文件被过滤"的噪音。
 
 > 等价官方方式：`python3 <WorkBuddy>/…/skill-creator/scripts/package_skill.py <skill-dir> dist`
 > （注意它会连 `.git` 一起打包，建议先 stage 干净副本，本仓库的脚本已处理这一点。）
 
-**发布**：把 `dist/<name>.zip` 上传到 WorkBuddy 技能市场；GitHub 侧把它作为 **Release 附件**（`v1.0.0`）。
+**发布**：三个渠道的完整步骤、可直接复制的提交表单字段、以及对齐平台 B 系列检查项的自查表，
+见 **[PUBLISHING.md](./PUBLISHING.md)**。
+
+```bash
+node scripts/validate-skill.mjs   # 本地自查：frontmatter / 必需文件 / 语法 / 市场导入规则
+```
 
 ## 开发
 

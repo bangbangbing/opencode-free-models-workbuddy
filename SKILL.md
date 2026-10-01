@@ -1,12 +1,12 @@
 ---
 name: opencode-free-models-workbuddy
 description: |
-  把 OpenCode Zen 的免费模型接入 WorkBuddy：跑一个本地隔离的 opencode 运行时，用固定端口的 OpenAI 兼容桥接
-  绕过服务端 FreeTier 门禁，并把全部免费模型自动同步进 WorkBuddy 的 models.json（Custom provider）。
-  Triggers: opencode 免费模型, 接入 opencode, 免费模型进 workbuddy, workbuddy 加免费模型, opencode bridge, opencode-xdbridge, opencode zen, 免费 API 模型, workbuddy 自定义模型, 同步免费模型, 桥接 opencode, opencode 免费模型怎么接
+  OpenCode Zen 免费模型接入 WorkBuddy：本地隔离 opencode 运行时 + 固定端口 OpenAI 兼容桥接，
+  绕过 FreeTier 门禁并同步进 models.json。
+  Triggers: opencode 免费模型, workbuddy 加免费模型, opencode bridge, opencode zen, 同步免费模型
 description_zh: "把 OpenCode Zen 免费模型接入 WorkBuddy"
-description_en: "Bridge OpenCode Zen free models into WorkBuddy"
-version: 1.0.0
+description_en: "Bridge OpenCode Zen free models into WorkBuddy via a local endpoint"
+version: 1.0.1
 when_to_use: |
   Use when the user wants OpenCode Zen's free models usable inside WorkBuddy, or wants to
   install / sync / verify / persist the local opencode bridge that feeds WorkBuddy's Custom
@@ -27,9 +27,12 @@ permissions:
   credential: none
   exec: opencode, node
 trust: |
-  会启动一个本地隔离的 opencode 进程并监听 127.0.0.1，往 ~/.workbuddy/models.json 追加 Custom 模型条目
-  （先备份）。仅暴露计费全部为 0 的模型，不产生费用。当本机找不到 opencode 二进制时，会从 npm 下载官方包
-  （约 57MB，sha512 校验）。不读取也不改动 OpenCode 自身的配置与凭据。
+  会启动一个本地隔离的 opencode 进程并监听 127.0.0.1（仅回环，带 Bearer 鉴权），往
+  ~/.workbuddy/models.json 追加 Custom 模型条目（先备份）。仅暴露计费全部为 0 的模型，
+  不产生费用。当本机找不到 opencode 二进制时，会从 registry.npmjs.org 下载官方包
+  （约 57MB，sha512 校验）；设 OPENCODE_BRIDGE_NO_DOWNLOAD=1 可禁用下载。不读取也不改动
+  OpenCode 自身的配置与凭据。不收集、不上传任何用户数据；无遥测。开机自启仅在用户
+  显式执行「持久化」动作时安装（launchd plist），并可随时 launchctl unload 移除。
 argument-hint: "[动作: 安装 | 同步 | 验证 | 状态 | 持久化 | 排查]"
 arguments:
   - action
@@ -75,6 +78,8 @@ FreeTierError: OpenCode's free tier can only be used from within OpenCode
   3. 都没有 → 提示先安装：
      `dsh plugin --profile <profile> add github:XDTrees/dsh-opencode-xdbridge`
      或 `git clone https://github.com/XDTrees/dsh-opencode-xdbridge` 后用 `OPENCODE_BRIDGE_PLUGIN_LIB` 指过去。
+- **禁止联网的环境**：设 `OPENCODE_BRIDGE_NO_DOWNLOAD=1`，桥接只使用本机已有的 opencode
+  二进制，找不到即报错退出，不发起任何下载。
 
 ## 动作路由（先按动作分流）
 
@@ -150,3 +155,21 @@ launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
 - 免费额度由上游决定，可能限流/地区限制；个别模型不可用属正常。
 - 桥接崩溃不影响 WorkBuddy，只是这些模型失联；重启桥接即可。
 - 桥接依赖 OpenCode 客户端接口（非官方开放 API），OpenCode 升级后可能需跟进插件版本。
+
+## 安全行为对照表（供安全审核）
+
+本技能是一个**本地模型网关**，扫描器标记的行为逐条对照如下。全部行为都发生在
+`127.0.0.1` 与 `~/.workbuddy/` 之下，无遥测、无上传、无广告、无后台常驻（除非用户显式
+执行 `安装 → 持久化`）。
+
+| 扫描标记 | 对应代码 | 目的与边界 |
+| --- | --- | --- |
+| 本地监听 | `bridge.mjs` `server.listen(PORT, '127.0.0.1')` | 仅回环地址；校验 Host/Origin 为本机 + Bearer token，否则 403/401 |
+| HTTP 请求 | `verify.mjs` `fetch(ep.baseUrl + '/health')`；桥接进程转发推理请求到 opencode.ai | 前者探活自己的本地端点；后者是技能的核心功能（模型推理） |
+| 下载二进制 | `bridge.mjs` 调插件 `findRuntime`，本机无 opencode 时从 registry.npmjs.org 下载官方包 | 官方源 + sha512 校验；设 `OPENCODE_BRIDGE_NO_DOWNLOAD=1` 可彻底禁用下载 |
+| 安装依赖包 | SKILL.md 前置条件一节的指引文字 | 指引用户**手动**执行 `dsh plugin add`；脚本自身不安装任何 npm 依赖 |
+| 持久化启动项 | `install-launchd.sh` 生成 launchd plist | 用户显式执行 `持久化` 动作才运行；`launchctl load` 亦由用户手动执行 |
+| 读取文件 | `endpoint.json`、`models.json`、`~/.dsh/profiles/` 目录探测 | 定位本机已有安装；不读取任何用户文档/凭据 |
+| 写入文件 | `~/.workbuddy/opencode-bridge/*`（运行时数据）、`models.json`（追加模型条目） | 写 `models.json` 前**先自动备份**为 `models.json.bak.<时间戳>` |
+| 删除文件 | 无 | 脚本中不存在任何 `rm`/`unlink` 调用（本表外无删除逻辑） |
+| 收集系统信息 | `os.homedir()`、Node 版本检查、`~/.dsh/profiles/` 目录列表 | 本机路径定位与兼容性检查；不发送到任何远端 |

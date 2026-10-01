@@ -21,6 +21,8 @@
  *   OPENCODE_BRIDGE_BINARY      path to the opencode binary
  *   OPENCODE_BRIDGE_PORT        loopback port (default 3199)
  *   OPENCODE_BRIDGE_TOKEN       bearer token WorkBuddy must send
+ *   OPENCODE_BRIDGE_NO_DOWNLOAD =1 to never download the opencode binary
+ *                               (fails fast when none is installed locally)
  */
 
 import fs from 'node:fs'
@@ -154,7 +156,10 @@ async function main() {
   const logStream = fs.createWriteStream(path.join(DATA_DIR, 'opencode.log'), { flags: 'a', mode: 0o600 })
   const note = (m) => { logStream.write(`${new Date().toISOString()} ${m}\n`); log(m) }
 
-  // Reuse an installed opencode; only download when nothing is found.
+  // Reuse an installed opencode; downloading is opt-in for locked-down hosts:
+  // set OPENCODE_BRIDGE_NO_DOWNLOAD=1 (or provide OPENCODE_BRIDGE_BINARY) to
+  // never fetch anything from the network in this step.
+  const noDownload = /^(1|true|yes)$/i.test(process.env.OPENCODE_BRIDGE_NO_DOWNLOAD || '')
   const candidates = [
     process.env.OPENCODE_BRIDGE_BINARY,
     path.join(HOME, '.opencode', 'bin', 'opencode'),
@@ -163,6 +168,14 @@ async function main() {
     ...(await dshRuntimeBinaries()),
   ].filter(Boolean)
   note('正在解析 opencode 运行时…')
+  if (noDownload && !candidates.some((f) => fs.existsSync(f))) {
+    console.error(
+      'OPENCODE_BRIDGE_NO_DOWNLOAD=1 且本机未找到 opencode 二进制。\n'
+      + '请先自行安装 opencode（npm i -g opencode-ai 或 brew install opencode），\n'
+      + '或用 OPENCODE_BRIDGE_BINARY 指向已有二进制，或不设置该环境变量以允许下载。',
+    )
+    process.exit(1)
+  }
   const binary = await findRuntime(DATA_DIR, note, { candidates })
   note(`使用 opencode 二进制：${binary}`)
 
