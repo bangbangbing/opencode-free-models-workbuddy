@@ -6,7 +6,7 @@ description: |
   Triggers: opencode 免费模型, workbuddy 加免费模型, opencode bridge, opencode zen, 同步免费模型
 description_zh: "把 OpenCode Zen 免费模型接入 WorkBuddy"
 description_en: "Bridge OpenCode Zen free models into WorkBuddy via a local endpoint"
-version: 1.0.1
+version: 1.0.2
 when_to_use: |
   Use when the user wants OpenCode Zen's free models usable inside WorkBuddy, or wants to
   install / sync / verify / persist the local opencode bridge that feeds WorkBuddy's Custom
@@ -31,8 +31,9 @@ trust: |
   ~/.workbuddy/models.json 追加 Custom 模型条目（先备份）。仅暴露计费全部为 0 的模型，
   不产生费用。当本机找不到 opencode 二进制时，会从 registry.npmjs.org 下载官方包
   （约 57MB，sha512 校验）；设 OPENCODE_BRIDGE_NO_DOWNLOAD=1 可禁用下载。不读取也不改动
-  OpenCode 自身的配置与凭据。不收集、不上传任何用户数据；无遥测。开机自启仅在用户
-  显式执行「持久化」动作时安装（launchd plist），并可随时 launchctl unload 移除。
+  OpenCode 自身的配置与凭据。不收集、不上传任何用户数据；无遥测。本技能不包含自动安装
+  开机自启的脚本：持久化仅为 references/persistence.md 文档指引，在用户显式要求时由
+  agent 生成 plist，launchctl load 由用户手动执行并可随时移除。
 argument-hint: "[动作: 安装 | 同步 | 验证 | 状态 | 持久化 | 排查]"
 arguments:
   - action
@@ -89,7 +90,7 @@ FreeTierError: OpenCode's free tier can only be used from within OpenCode
 | `同步` | 重跑 `sync-workbuddy-models.mjs`（上游换模型后） |
 | `验证` | 跑 `verify.mjs` + 发一次真实请求 |
 | `状态` | 只看 `/health` 与 endpoint.json，不改动任何东西 |
-| `持久化` | 跑 `install-launchd.sh` 生成开机自启 |
+| `持久化` | 按 references/persistence.md 由 agent 生成 plist 并指导用户 load |
 | `排查` | 直接跳 references/troubleshooting.md |
 
 ## 默认流程
@@ -128,12 +129,12 @@ curl -s -X POST http://127.0.0.1:3199/v1/chat/completions \
 
 ### Step 4：持久化（可选）
 
-```bash
-bash <skill>/scripts/install-launchd.sh    # 生成 plist
-launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
-```
+按 `references/persistence.md` 执行：agent 用 Write 工具生成
+`~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist`（模板在文档中），
+再由用户执行 `launchctl load`。
 
 > 若手动起的桥接还占着 3199，先停掉再 load，否则端口冲突。
+> 本技能不含自动安装持久化的脚本——一切以文档指引 + 用户显式同意为准。
 
 ## 模型命名与映射
 
@@ -168,7 +169,7 @@ launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
 | HTTP 请求 | `verify.mjs` `fetch(ep.baseUrl + '/health')`；桥接进程转发推理请求到 opencode.ai | 前者探活自己的本地端点；后者是技能的核心功能（模型推理） |
 | 下载二进制 | `bridge.mjs` 调插件 `findRuntime`，本机无 opencode 时从 registry.npmjs.org 下载官方包 | 官方源 + sha512 校验；设 `OPENCODE_BRIDGE_NO_DOWNLOAD=1` 可彻底禁用下载 |
 | 安装依赖包 | SKILL.md 前置条件一节的指引文字 | 指引用户**手动**执行 `dsh plugin add`；脚本自身不安装任何 npm 依赖 |
-| 持久化启动项 | `install-launchd.sh` 生成 launchd plist | 用户显式执行 `持久化` 动作才运行；`launchctl load` 亦由用户手动执行 |
+| 持久化启动项 | `references/persistence.md`（**纯文档模板**） | 技能**不包含**任何自动安装持久化的脚本；仅当用户显式要求「持久化」时，agent 按文档生成 plist，`launchctl load` 由用户手动执行，可随时 unload + 删除回滚 |
 | 读取文件 | `endpoint.json`、`models.json`、`~/.dsh/profiles/` 目录探测 | 定位本机已有安装；不读取任何用户文档/凭据 |
 | 写入文件 | `~/.workbuddy/opencode-bridge/*`（运行时数据）、`models.json`（追加模型条目） | 写 `models.json` 前**先自动备份**为 `models.json.bak.<时间戳>` |
 | 删除文件 | 无 | 脚本中不存在任何 `rm`/`unlink` 调用（本表外无删除逻辑） |

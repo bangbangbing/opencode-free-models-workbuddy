@@ -107,8 +107,10 @@ node scripts/verify.mjs
 │   ├── validate-skill.mjs    # 本仓库自检 + 市场导入规则（CI 也跑）
 │   ├── package-skill.sh      # 打出完整包 + 市场精简包
 │   ├── run-bridge.sh
-│   └── install-launchd.sh
-├── references/troubleshooting.md
+│   └── …
+├── references/
+│   ├── persistence.md        # 开机自启指南（纯文档模板，无自动安装脚本）
+│   └── troubleshooting.md
 ├── assets/
 │   ├── icon.png              # 512×512 技能图标（上架时单独上传）
 │   └── com.workbuddy.opencode-bridge.plist.template
@@ -137,10 +139,9 @@ node scripts/verify.mjs
 
 ## 开机自启（macOS）
 
-```bash
-bash scripts/install-launchd.sh
-launchctl load ~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist
-```
+见 **[references/persistence.md](./references/persistence.md)**：按文档用 Write 工具生成
+`~/Library/LaunchAgents/com.workbuddy.opencode-bridge.plist`，再 `launchctl load`。
+（v1.0.2 起不再提供自动安装脚本，持久化为纯文档指引、显式 opt-in。）
 
 ## 打包与发布（WorkBuddy 技能市场）
 

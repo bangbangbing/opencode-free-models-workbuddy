@@ -32,7 +32,7 @@ console.log('必需文件')
 for (const f of ['SKILL.md', 'README.md', 'LICENSE', 'NOTICE', 'CHANGELOG.md']) {
   exists(f) ? ok(f) : bad(`缺少 ${f}`)
 }
-for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs', 'scripts/run-bridge.sh', 'scripts/install-launchd.sh']) {
+for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs', 'scripts/run-bridge.sh', 'references/persistence.md', 'references/troubleshooting.md']) {
   exists(f) ? ok(f) : bad(`缺少 ${f}`)
 }
 

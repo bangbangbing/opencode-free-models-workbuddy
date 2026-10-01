@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2
+
+- **安全审核整改二轮**：腾讯威胁情报中心复查后仅剩 1 项「可疑」——`scripts/install-launchd.sh`
+  （生成 launchd plist 写入 LaunchAgents）。
+  - **移除该脚本**，改为 `references/persistence.md` 纯文档模板：仅当用户显式要求「持久化」时
+    由 agent 按文档生成 plist，`launchctl load` 由用户手动执行，可随时 unload + 删除回滚。
+  - SKILL.md 动作路由 / Step 4 / trust 声明 / 安全行为对照表同步更新。
+  - 其余 8 个文件在二轮扫描中已全部判定「安全」（含 bridge.mjs 本体）。
+
 ## 1.0.1
 
 - **安全审核整改**（首轮上架被拒后的修复）：
@@ -16,7 +25,7 @@
 - `scripts/bridge.mjs`：隔离 opencode 运行时 + 固定端口 OpenAI 兼容端点（含 SSE 流式），自动探测 DSH 插件与 opencode 二进制。
 - `scripts/sync-workbuddy-models.mjs`：把免费模型写入 `~/.workbuddy/models.json`（先备份）。
 - `scripts/verify.mjs`：校验桥接与 models.json 一致性。
-- `scripts/install-launchd.sh`：生成开机自启 plist。
+- `references/persistence.md`：开机自启指南（文档模板，替代 v1.0.0 的 install-launchd.sh）。
 - `scripts/validate-skill.mjs` + `.github/workflows/validate.yml`：仓库自检与 CI。
 - `scripts/package-skill.sh`：打包为两个 zip —— 完整包（GitHub Release）与市场精简包（上架 SkillHub，只含 `SKILL.md` + `references/` + `scripts/`，对齐平台白名单）。
 - `PUBLISHING.md`：三渠道发布指南 + 可直接复制的提交表单字段 + 对齐平台 B 系列检查项的自查表。
