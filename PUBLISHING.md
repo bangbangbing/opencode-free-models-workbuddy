@@ -45,11 +45,13 @@ bash scripts/package-skill.sh
 仓库根目录直接放 `SKILL.md` 即可被识别。完整包（README/LICENSE/NOTICE/CI 工作流）就是照
 GitHub 仓库形态组织的。
 
+### 首次推送
+
 ```bash
-cd <repo>
-git init && git add -A && git commit -m "feat: OpenCode Zen free models bridge for WorkBuddy"
+git init && git add -A
+git commit -m "feat: OpenCode Zen free models bridge for WorkBuddy"
 git branch -M main
-git remote add origin git@github.com:<you>/opencode-free-models-workbuddy.git
+git remote add origin https://github.com/bangbangbing/opencode-free-models-workbuddy.git
 git push -u origin main
 ```
 
@@ -59,15 +61,42 @@ git push -u origin main
 git -c http.proxy=http://127.0.0.1:7897 -c https.proxy=http://127.0.0.1:7897 push -u origin main
 ```
 
-打 Release 并附上 `dist/opencode-free-models-workbuddy.zip`：
+### 发版（推荐：交给 CI，不用手工打包）
+
+`.github/workflows/release.yml` 已配好：**推 tag 即自动校验 → 打包 → 建 Release → 传附件 + SHA256**。
 
 ```bash
-git tag v1.0.0 && git push --tags
-gh release create v1.0.0 dist/opencode-free-models-workbuddy.zip \
-  --title "v1.0.0" --notes "首个版本：把 OpenCode Zen 免费模型桥接进 WorkBuddy"
+# 1) 先改 version（package.json + SKILL.md）与 CHANGELOG.md
+# 2) 本地跑一次自查
+node scripts/validate-skill.mjs
+# 3) 推 tag —— 剩下的 CI 做
+git add -A && git commit -m "chore: release v1.0.4"
+git tag v1.0.4
+git push origin main --tags
 ```
 
-别人安装方式：把仓库地址发过去，由 WorkBuddy 从仓库拉取（仓库根目录含 `SKILL.md`）。
+CI 会把两个 zip 和 `SHA256SUMS.txt` 挂到 Release 上，Release 说明里自动带上下载即用的安装命令。
+
+也可以手动走 `gh`（不想用 CI 时）：
+
+```bash
+bash scripts/package-skill.sh
+gh release create v1.0.4 dist/opencode-free-models-workbuddy.zip \
+  dist/opencode-free-models-workbuddy.marketplace.zip \
+  --title "v1.0.4" --generate-notes
+```
+
+### CI 会做什么
+
+| 工作流 | 触发 | 动作 |
+| --- | --- | --- |
+| `validate.yml` | push / PR | Node 22.19 与 24 双版本跑 `validate-skill.mjs`；构建两个 zip 并作为 artifact 上传 |
+| `release.yml` | 推 `v*` tag（或手动 dispatch） | 校验 → 打包 → 生成 SHA256SUMS → 建 Release 并挂附件 |
+
+### 别人怎么安装
+
+- **WorkBuddy 技能**：下载 Release 里的 `opencode-free-models-workbuddy.zip`，解压到 `~/.workbuddy/skills/`。
+- **Git 方式**：把仓库地址发过去，由 WorkBuddy 从仓库拉取（仓库根目录含 `SKILL.md`）。
 
 ---
 
@@ -86,7 +115,7 @@ gh release create v1.0.0 dist/opencode-free-models-workbuddy.zip \
 1. 进开发者中心 → 「发布新技能」。
 2. 填写下方「提交表单字段」表里的内容（可直接复制）。
 3. 上传 `dist/opencode-free-models-workbuddy.marketplace.zip` 与 `assets/icon.png`。
-4. 填写版本说明（v1.0.0 首个版本）。
+4. 填写版本说明（v1.0.4 自愈 + 跨平台）。
 5. 提交审核，等待 1–3 个工作日。被拒会附理由，改完可重新提交。
 6. 通过后技能进入市场，可被搜索、安装、评分。
 
@@ -97,7 +126,7 @@ gh release create v1.0.0 dist/opencode-free-models-workbuddy.zip \
 | 技能名称 | OpenCode 免费模型桥接 |
 | 技能名（英文） | OpenCode Free Models Bridge |
 | slug / name | `opencode-free-models-workbuddy` |
-| 版本 | `1.0.0` |
+| 版本 | `1.0.4` |
 | 一句话简介（中文，≤50 字） | 把 OpenCode Zen 免费模型接入 WorkBuddy |
 | 一句话简介（英文，60–80 字符） | Bridge OpenCode Zen free models into WorkBuddy via a local endpoint |
 | 功能说明 | 见下方「功能说明」段落 |
@@ -109,13 +138,13 @@ gh release create v1.0.0 dist/opencode-free-models-workbuddy.zip \
 
 - 把 opencode 的免费模型接到 workbuddy
 - 同步一下 opencode 免费模型
-- 让这个桥接开机自启
+- 模型连不上了，自动修一下
 
 **使用示例（英文）**
 
 - Bridge the free OpenCode models into WorkBuddy
 - Sync the OpenCode free model list
-- Make the bridge start on login
+- The models stopped working — self-heal the bridge
 
 ### 功能说明（一段话，可直接用）
 
@@ -149,7 +178,7 @@ bash scripts/package-skill.sh        # 内含官方 quick_validate.py
 | B15 / B16 | `references` 引用双向有效 | ✅ `references/troubleshooting.md` 已在正文被引用 |
 | B18 | 无 ClawHub 残留 | ✅ |
 | B19 | 安全性 / 通用性 | ✅ 见下 |
-| B21 | 包体建议 ≤100KB | ✅ 18KB |
+| B21 | 包体建议 ≤100KB | ✅ 见 `bash scripts/package-skill.sh` 输出 |
 | S05 | 有快速开始示例 / 代码块 | ✅ 正文含 10 个代码块 |
 
 ### 安全性自查结论（对应 B19）
@@ -165,9 +194,10 @@ bash scripts/package-skill.sh        # 内含官方 quick_validate.py
 
 ## 更新已发布的技能
 
-1. 改 `SKILL.md` 的 `version`（语义化：修 bug 升 patch、加功能升 minor、不兼容升 major）与 `CHANGELOG.md`。
-2. `bash scripts/package-skill.sh` 重新打包。
-3. 开发者中心 → 我的技能 → 新版本 → 上传新 zip + 版本说明。
-4. GitHub 侧同步打 tag + Release。
+1. 改 `SKILL.md` 的 `version`（语义化：修 bug 升 patch、加功能升 minor、不兼容升 major）、
+   `package.json` 的 `version` 与 `CHANGELOG.md`。
+2. `node scripts/validate-skill.mjs` 自查；`bash scripts/package-skill.sh` 本地打包（可选，CI 也会打）。
+3. GitHub：`git tag vX.Y.Z && git push origin main --tags` → CI 自动发 Release。
+4. 开发者中心 → 我的技能 → 新版本 → 上传 `dist/opencode-free-models-workbuddy.marketplace.zip` + 版本说明。
 
 建议节奏：至少每 2 个月维护一次；集中处理 issue 后一并出小版本。

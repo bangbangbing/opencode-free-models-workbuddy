@@ -9,8 +9,8 @@
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24-brightgreen.svg)](package.json)
-[![validate](https://github.com/OWNER/REPO/actions/workflows/validate.yml/badge.svg?branch=main)](../../actions/workflows/validate.yml)
-<!-- 发布后把上面的 OWNER/REPO 换成你的 GitHub 用户名/仓库名 -->
+[![validate](https://github.com/bangbangbing/opencode-free-models-workbuddy/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/bangbangbing/opencode-free-models-workbuddy/actions/workflows/validate.yml)
+[![release](https://img.shields.io/github/v/release/bangbangbing/opencode-free-models-workbuddy?sort=semver)](https://github.com/bangbangbing/opencode-free-models-workbuddy/releases)
 
 </div>
 
@@ -40,16 +40,20 @@ WorkBuddy ──HTTP──▶ 127.0.0.1:3199 (bridge.mjs) ──HTTP──▶ is
 ### 作为 WorkBuddy 技能
 
 ```bash
-git clone https://github.com/OWNER/REPO.git \
+git clone https://github.com/bangbangbing/opencode-free-models-workbuddy.git \
   ~/.workbuddy/skills/opencode-free-models-workbuddy
 ```
+
+或直接下载最新 Release 里的 `opencode-free-models-workbuddy.zip`，解压到
+`~/.workbuddy/skills/` 即可（见 [Releases](https://github.com/bangbangbing/opencode-free-models-workbuddy/releases)）。
 
 之后用自然语言触发即可，例如「把 opencode 免费模型接到 workbuddy」「同步免费模型」「验证桥接」。
 
 ### 作为独立工具
 
 ```bash
-git clone https://github.com/OWNER/REPO.git && cd REPO
+git clone https://github.com/bangbangbing/opencode-free-models-workbuddy.git
+cd opencode-free-models-workbuddy
 ```
 
 ## 前置条件
@@ -76,22 +80,50 @@ export OPENCODE_BRIDGE_PLUGIN_LIB="$PWD/dsh-opencode-xdbridge/lib"
 ## 快速开始
 
 ```bash
-# 1) 起桥接（后台）
-node scripts/bridge.mjs &
+# 1) 一条命令搞定：诊断 + 修复 + 同步（跨平台，macOS/Windows/Linux 通用）
+node scripts/doctor.mjs
 
-# 2) 等就绪
-until [ -f ~/.workbuddy/opencode-bridge/endpoint.json ]; do sleep 2; done
-curl -s -H "Authorization: Bearer 5b3a9c2e1b6d4f8a0c5e2b9d1a4f6c8e7f3a9c2e1b6d4f8a0c5e2b9d1a4f6c8e" \
-  http://127.0.0.1:3199/health        # {"ok":true,"models":8}
-
-# 3) 写入 WorkBuddy（自动备份 models.json）
-node scripts/sync-workbuddy-models.mjs
-
-# 4) 重启 WorkBuddy，模型选择器出现 OpenCode · <模型名>
-
-# 5) 验证
-node scripts/verify.mjs
+# 2) 重启 WorkBuddy，模型选择器出现 OpenCode · <模型名>
 ```
+
+`doctor.mjs` 会自动拉起桥接、修复上游、同步 `models.json`。手动分步方式：
+
+```bash
+node scripts/bridge.mjs &                                   # 起桥接
+until [ -f ~/.workbuddy/opencode-bridge/endpoint.json ]; do sleep 2; done
+curl -s --noproxy '*' -H "Authorization: Bearer <token>" \
+  http://127.0.0.1:3199/health        # {"ok":true,"bridge":true,"models":N,...}
+node scripts/sync-workbuddy-models.mjs                      # 写入 WorkBuddy（自动备份）
+node scripts/verify.mjs                                     # 验证一致性
+```
+
+## 自愈
+
+模型用不了时，第一步永远是：
+
+```bash
+node scripts/doctor.mjs            # 诊断 + 修复
+node scripts/doctor.mjs --check    # 只诊断，不改动
+node scripts/doctor.mjs --json     # 机器可读（定时巡检用）
+```
+
+| 诊断结论 | 自动修复 |
+| --- | --- |
+| 桥接未运行 | 以脱离进程方式拉起，轮询到就绪 |
+| 端口被别的程序占用 | 只报告不杀进程，建议换端口 |
+| 上游运行时不可用 | 重启上游；失败则整体重启桥接 |
+| models.json 与桥接不一致 | 自动重新同步 |
+
+另有**桥接内自愈**（默认开启）：上游 `opencode serve` 崩溃时自动重启，
+无需外部干预。两层配合见 [references/persistence.md](./references/persistence.md)。
+
+## 平台支持
+
+| 平台 | 状态 | 自启方式 |
+| --- | --- | --- |
+| macOS | 完整支持（arm64 / x64） | launchd plist |
+| Windows | 完整支持（x64 / arm64，二进制 `opencode.exe`） | 任务计划程序 / 启动文件夹 |
+| Linux | 可用（x64 / arm64） | systemd 或 crontab |
 
 ## 仓库结构
 
@@ -101,15 +133,17 @@ node scripts/verify.mjs
 ├── README.md  PUBLISHING.md  LICENSE  NOTICE  CONTRIBUTING.md  SECURITY.md  CHANGELOG.md
 ├── package.json              # 元数据 + npm scripts
 ├── scripts/
-│   ├── bridge.mjs            # 隔离运行时 + OpenAI 兼容端点（便携，自动探测）
+│   ├── bridge.mjs            # 隔离运行时 + OpenAI 兼容端点（含上游自愈，跨平台）
+│   ├── doctor.mjs            # 自愈入口：诊断 + 自动修复（跨平台）
 │   ├── sync-workbuddy-models.mjs
 │   ├── verify.mjs
-│   ├── validate-skill.mjs    # 本仓库自检 + 市场导入规则（CI 也跑）
+│   ├── validate-skill.mjs    # 本仓库自检 + 市场导入规则 + 跨平台检查（CI 也跑）
 │   ├── package-skill.sh      # 打出完整包 + 市场精简包
-│   ├── run-bridge.sh
+│   ├── run-bridge.sh         # macOS / Linux 前台启动
+│   ├── run-bridge.cmd        # Windows 前台启动
 │   └── …
 ├── references/
-│   ├── persistence.md        # 开机自启指南（纯文档模板，无自动安装脚本）
+│   ├── persistence.md        # 开机自启指南（macOS launchd + Windows 任务计划；纯文档）
 │   └── troubleshooting.md
 ├── assets/
 │   ├── icon.png              # 512×512 技能图标（上架时单独上传）

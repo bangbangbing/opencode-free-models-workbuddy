@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.4)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19'
+
+      - name: Validate
+        run: node scripts/validate-skill.mjs
+
+      - name: Build zips
+        run: bash scripts/package-skill.sh
+
+      - name: Checksums
+        run: |
+          cd dist
+          shasum -a 256 ./*.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ## 安装
+
+            **WorkBuddy 技能** — 解压 `opencode-free-models-workbuddy.zip` 到 `~/.workbuddy/skills/`：
+
+            ```bash
+            curl -L -o /tmp/ofm.zip \
+              https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/opencode-free-models-workbuddy.zip
+            unzip -o /tmp/ofm.zip -d ~/.workbuddy/skills/
+            ```
+
+            **SkillHub 上架** — 上传 `opencode-free-models-workbuddy.marketplace.zip`。
+
+            装好后跑一次自愈入口，然后重启 WorkBuddy：
+
+            ```bash
+            node ~/.workbuddy/skills/opencode-free-models-workbuddy/scripts/doctor.mjs
+            ```
+          files: |
+            dist/opencode-free-models-workbuddy.zip
+            dist/opencode-free-models-workbuddy.marketplace.zip
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: false

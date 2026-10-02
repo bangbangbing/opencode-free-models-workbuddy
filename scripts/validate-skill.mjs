@@ -32,12 +32,16 @@ console.log('必需文件')
 for (const f of ['SKILL.md', 'README.md', 'LICENSE', 'NOTICE', 'CHANGELOG.md']) {
   exists(f) ? ok(f) : bad(`缺少 ${f}`)
 }
-for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs', 'scripts/run-bridge.sh', 'references/persistence.md', 'references/troubleshooting.md']) {
+for (const f of [
+  'scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs',
+  'scripts/doctor.mjs', 'scripts/run-bridge.sh', 'scripts/run-bridge.cmd',
+  'references/persistence.md', 'references/troubleshooting.md',
+]) {
   exists(f) ? ok(f) : bad(`缺少 ${f}`)
 }
 
 console.log('node --check')
-for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs', 'scripts/validate-skill.mjs']) {
+for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs', 'scripts/doctor.mjs', 'scripts/validate-skill.mjs']) {
   try {
     execFileSync(process.execPath, ['--check', path.join(root, f)], { stdio: 'pipe' })
     ok(f)
@@ -46,7 +50,47 @@ for (const f of ['scripts/bridge.mjs', 'scripts/sync-workbuddy-models.mjs', 'scr
   }
 }
 
-// --- WorkBuddy marketplace ingestion rules (B-series) ------------------------
+console.log('跨平台检查')
+{
+  // No POSIX-only assumptions in the Node entry points: /bin/sh, bash, etc.
+  const posixOnly = ['/bin/sh', '/bin/bash', 'chmod +x ']
+  for (const f of ['scripts/bridge.mjs', 'scripts/doctor.mjs', 'scripts/sync-workbuddy-models.mjs', 'scripts/verify.mjs']) {
+    const src = read(f)
+    const hit = posixOnly.find((needle) => src.includes(needle))
+    hit ? bad(`${f} 含 POSIX 专有片段：${hit}`) : ok(`${f} 无 POSIX 专有依赖`)
+  }
+  exists('scripts/run-bridge.cmd') ? ok('存在 Windows 启动脚本 run-bridge.cmd') : bad('缺少 run-bridge.cmd')
+}
+
+console.log('GitHub 发布就绪')
+{
+  // No unfilled placeholders may ship: they are the #1 reason a "ready to
+  // publish" repo still doesn't work when someone clones it.
+  const readme = read('README.md')
+  const placeholder = /OWNER\/REPO|your-username|github\.com\/<you>/.exec(readme)
+  placeholder ? bad(`README.md 仍含占位符：${placeholder[0]}`) : ok('README.md 无占位符')
+
+  // README badges/links should point at the real repo.
+  const repoSlug = /github\.com\/([A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)\.git/.exec(`${readme}\n${read('package.json')}`)
+  if (repoSlug) {
+    readme.includes(repoSlug[1]) ? ok(`README 指向 ${repoSlug[1]}`) : bad(`README 未指向 ${repoSlug[1]}`)
+  } else {
+    bad('package.json 缺少 repository 字段')
+  }
+
+  // Release automation must exist, otherwise "publish" is a manual chore.
+  exists('.github/workflows/release.yml') ? ok('存在 release.yml') : bad('缺少 .github/workflows/release.yml')
+  exists('.github/workflows/validate.yml') ? ok('存在 validate.yml') : bad('缺少 .github/workflows/validate.yml')
+
+  // Every workflow referenced by a badge must actually exist.
+  const wfRefs = [...readme.matchAll(/actions\/workflows\/([A-Za-z0-9._-]+\.ya?ml)/g)].map((m) => m[1])
+  const missingWf = [...new Set(wfRefs)].filter((f) => !exists(`.github/workflows/${f}`))
+  missingWf.length === 0
+    ? ok(`README 徽章引用的工作流均存在 (${[...new Set(wfRefs)].length} 个)`)
+    : bad(`README 徽章引用了不存在的 workflow: ${missingWf.join(', ')}`)
+}
+
+
 // Mirrors the checks the platform's review pipeline runs. Catching these locally
 // is cheaper than being rejected 1-3 business days later.
 console.log('市场导入规则')

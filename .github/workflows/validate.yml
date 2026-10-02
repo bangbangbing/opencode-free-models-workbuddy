@@ -5,13 +5,37 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.19', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Self-check (frontmatter / required files / syntax / marketplace rules)
+        run: node scripts/validate-skill.mjs
+
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Validate skill
-        run: node scripts/validate-skill.mjs
+          node-version: '22.19'
+      - name: Build zips
+        run: bash scripts/package-skill.sh
+      - name: Show artifacts
+        run: ls -l dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-zips
+          path: dist/*.zip
+          if-no-files-found: error
