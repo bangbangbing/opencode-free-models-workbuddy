@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.0.4
+
+- **新增跨平台自愈入口 `scripts/doctor.mjs`**（macOS / Windows / Linux，纯 Node，不依赖
+  bash 或 PowerShell）：「连不上就自动修」。
+  - 分类诊断：`healthy` / `degraded`（上游死）/ `foreign`（端口被占）/ `down`（没跑）。
+  - 自动修复：脱离方式拉起桥接 → 重启上游 → 重同步 models.json。
+  - 端口被**别的程序**占用时只报告、不结束对方进程；`--check` 只诊断、`--json` 机器可读。
+  - 退出码 0/1，可直接用于定时巡检或自动化。
+- **Windows 支持补齐**：
+  - 二进制名按平台取 `opencode.exe` / `opencode`；候选路径扩充
+    `%LOCALAPPDATA%\opencode\bin`、`%APPDATA%\opencode\bin`、`%ProgramFiles%\opencode`、
+    `$XDG_BIN_HOME`（macOS 侧增加 `$XDG_BIN_HOME`）。
+  - 新增 `scripts/run-bridge.cmd`（Windows 前台启动）；`run-bridge.sh` 改为 POSIX `sh` 兼容并透传参数。
+  - references/persistence.md 增补 **Windows 自启方案**：任务计划程序（含崩溃重启、
+    可直接照抄的 PowerShell 命令）与启动文件夹，并给出卸载方法。
+- **修复启动时序缺陷**：桥接此前先 `listen` 再 `startRuntime`，导致 `/health` 在加载模型的
+  间隙返回 `models: 0`。现在先起运行时再开端口，端口一旦可用即代表真正就绪。
+- 自检脚本 `validate-skill.mjs` 增加**跨平台检查**（扫描 Node 入口中的 POSIX 专有片段、
+  校验 Windows 启动脚本存在）与新增文件校验。
+- 文档：SKILL.md 增补「自愈」「平台支持」「三层防护的关系」章节与环境变量；
+  troubleshooting 增补「第一步永远是自愈」。
+- **发布就绪（面向 GitHub）**：
+  - 新增 `.github/workflows/release.yml`——推 `v*` tag 即自动校验 → 打包 → 建 Release →
+    挂上两个 zip 与 `SHA256SUMS.txt`，Release 正文自带下载即用的安装命令。
+  - `validate.yml` 升级为矩阵（Node 22.19 / 24）并新增打包任务，PR 阶段就能拿到 zip 产物。
+  - `README.md` 占位符全部替换为真实仓库地址，新增 Release 徽章与「下载解压即装」路径。
+  - `package.json` 补齐 `repository` / `homepage` / `bugs` / `author`，`files` 纳入发布文档。
+  - `SECURITY.md` 明确披露 `doctor.mjs` 的脱离进程行为与「绝不杀别人的进程」承诺。
+  - `validate-skill.mjs` 新增「GitHub 发布就绪」检查：占位符残留、仓库地址指向、
+    workflow 存在性、徽章引用有效性——防止"自认为可发布"的回归。
+
+## 1.0.3
+
+- **修复「模型突然全部不可用」**：上游 `opencode serve` 子进程静默死亡后，旧版桥接不感知，
+  一直对外宣告死端点，所有请求报 `ECONNREFUSED 127.0.0.1:<随机端口>`。
+  - 给 `startBackend` 传 `onExit` 回调（此前漏传），上游退出立刻感知。
+  - 运行时改为 getter 取用，不再用 `const` 缓存引用（重启后自动生效）。
+  - 新增自动恢复：exit 事件 + 请求 `ECONNREFUSED` 双触发，默认最多 5 次、间隔 2 秒，
+    稳定存活 60 秒重置预算（对齐 `dsh-opencode-xdbridge` 的 `handleRuntimeExit` 思路）。
+  - 新增 `POST /admin/restart` 手动复位；`/health` 增补 `upstreamAlive` / `recovering` / `restarts`。
+  - 每次重启后重写 `endpoint.json`（含 `upstreamAlive`、`restarts`、`adminRestart`）。
+  - 新增环境变量 `OPENCODE_BRIDGE_MAX_RESTARTS`、`OPENCODE_BRIDGE_EXIT_ON_FAILURE`。
+- 文档：troubleshooting 增补「上游崩溃与自动恢复」小节与自愈验证步骤；
+  SKILL.md 增补「运行时生命周期与自愈」与「环境变量一览」。
+- 修正排查命令：本地 curl 一律加 `--noproxy '*'`——环境若设了 `HTTP_PROXY`，
+  请求会被系统代理吞掉并报 `upstream connect failed`，与桥接无关。
+
 ## 1.0.2
 
 - **安全审核整改二轮**：腾讯威胁情报中心复查后仅剩 1 项「可疑」——`scripts/install-launchd.sh`

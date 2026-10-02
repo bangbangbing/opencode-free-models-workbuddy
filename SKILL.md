@@ -6,7 +6,7 @@ description: |
   Triggers: opencode 免费模型, workbuddy 加免费模型, opencode bridge, opencode zen, 同步免费模型
 description_zh: "把 OpenCode Zen 免费模型接入 WorkBuddy"
 description_en: "Bridge OpenCode Zen free models into WorkBuddy via a local endpoint"
-version: 1.0.2
+version: 1.0.4
 when_to_use: |
   Use when the user wants OpenCode Zen's free models usable inside WorkBuddy, or wants to
   install / sync / verify / persist the local opencode bridge that feeds WorkBuddy's Custom
@@ -71,8 +71,9 @@ FreeTierError: OpenCode's free tier can only be used from within OpenCode
 
 ## 前置条件
 
-- **Node**：`^22.19 || >=24`（插件的 engines 要求）。
-- **opencode 二进制**：本机已有，或允许联网下载（约 57MB）。
+- **Node**：`^22.19 || >=24`（插件的 engines 要求）。macOS / Windows / Linux 均可。
+- **opencode 二进制**：本机已有，或允许联网下载（约 57MB）。Windows 下文件名为
+  `opencode.exe`，候选路径见下节「平台支持」。
 - **`dsh-opencode-xdbridge` 插件核心模块**（提供 bridge 逻辑）。解析顺序：
   1. 环境变量 `OPENCODE_BRIDGE_PLUGIN_LIB`
   2. `$DSH_HOME/profiles/*/node_modules/dsh-opencode-xdbridge/lib`（DSH 已装插件时直接用）
@@ -86,12 +87,95 @@ FreeTierError: OpenCode's free tier can only be used from within OpenCode
 
 | action | 做什么 |
 | --- | --- |
-| `安装` | Step 1 起桥接 → Step 2 同步 models.json → 提示重启 WorkBuddy |
+| `安装` | 启动桥接 → 同步 models.json → 提示重启 WorkBuddy |
+| `自愈` | **跑 `doctor.mjs`**：连不上就自动修（拉起桥接 / 重启上游 / 重同步 models.json） |
 | `同步` | 重跑 `sync-workbuddy-models.mjs`（上游换模型后） |
 | `验证` | 跑 `verify.mjs` + 发一次真实请求 |
-| `状态` | 只看 `/health` 与 endpoint.json，不改动任何东西 |
-| `持久化` | 按 references/persistence.md 由 agent 生成 plist 并指导用户 load |
+| `状态` | 看 `/health`（含 `upstreamAlive` / `recovering` / `restarts`）与 endpoint.json，不改动任何东西 |
+| `恢复` | 上游卡死时 `POST /admin/restart` 手动复位 |
+| `持久化` | 按 references/persistence.md 生成 launchd（macOS）或计划任务（Windows），由用户手动执行 |
 | `排查` | 直接跳 references/troubleshooting.md |
+
+> **任何「模型用不了」的报修，第一步都跑 `node scripts/doctor.mjs`。**
+> 它会自己判断坏在哪一层并修复，修不好才需要人工介入。
+
+## 自愈：连不上就自动修（`doctor.mjs`）
+
+单一入口，跨平台（macOS / Windows / Linux），纯 Node 实现，不依赖 bash 或 PowerShell：
+
+```bash
+node scripts/doctor.mjs            # 诊断 + 修复（默认）
+node scripts/doctor.mjs --check    # 只诊断，不改动任何东西
+node scripts/doctor.mjs --json     # 机器可读结果（便于自动化/定时巡检）
+```
+
+它先判断「到底坏在哪一层」，再做对应的修复：
+
+| 诊断结论 | 自动修复动作 |
+| --- | --- |
+| 桥接未运行（端口无响应） | 以**脱离进程**方式拉起桥接（POSIX 独立会话 / Windows 独立进程组），轮询到就绪 |
+| 端口被**别的程序**占用 | **只报告，不结束对方进程**；建议改用 `OPENCODE_BRIDGE_PORT=3399` |
+| 桥接在线但上游不可用 | `POST /admin/restart` 重启上游；失败则整个重启桥接 |
+| models.json 与桥接不一致 | 自动重跑同步脚本（模型清单漂移） |
+
+退出码：`0` = 可用（含修复后可用）；`1` = 仍不可用。修复成功且改动过
+models.json 时会提示「重启 WorkBuddy 才加载」。
+
+> 首次冷启动可能要下载 opencode（约 57MB），doctor 默认最多等 5 分钟
+> （`OPENCODE_BRIDGE_START_TIMEOUT_MS` 可调），期间会打印等待提示。
+
+### 三层防护的关系
+
+| 层 | 触发时机 | 谁在做 |
+| --- | --- | --- |
+| 上游自愈 | 上游 opencode 进程崩溃/退出 | 桥接进程内部，**默认开启** |
+| 桥接自愈 | 桥接进程本身没跑 / 上游卡死 / 配置漂移 | `doctor.mjs` |
+| 系统级拉起 | 开机、登录、桥接被杀 | launchd（macOS）/ 计划任务（Windows），opt-in |
+
+配好第三层就基本不需要手动跑 doctor；没配的话，或者 WorkBuddy 里模型突然
+不可用时，跑一次 doctor 即可。
+
+## 平台支持
+
+| 平台 | 状态 | 说明 |
+| --- | --- | --- |
+| macOS | 完整支持 | arm64 / x64；自启走 launchd |
+| Windows | 完整支持 | x64 / arm64；二进制 `opencode.exe`；自启走任务计划程序或启动文件夹 |
+| Linux | 可用 | x64 / arm64；自启用 systemd 或 crontab（未写文档，思路同 macOS） |
+
+跨平台实现要点：
+
+- **二进制名**按平台取 `opencode.exe` / `opencode`，候选路径含
+  `%LOCALAPPDATA%\opencode\bin`、`%APPDATA%\opencode\bin`、`%ProgramFiles%\opencode`（Windows）
+  与 `~/.opencode/bin`、Homebrew、`/usr/local/bin`（macOS/Linux）。
+- **拉起进程**用 `detached + unref + windowsHide`，两种平台都能脱离父进程存活，
+  且 Windows 下不弹控制台窗口。
+- **本地 HTTP 探测**直连 `127.0.0.1`，规避 `HTTP_PROXY` 环境变量把回环请求
+  交给代理（那会报出误导性的 `upstream connect failed`）。
+- **启动脚本**：`run-bridge.sh`（macOS/Linux）与 `run-bridge.cmd`（Windows）。
+
+## 运行时生命周期与自愈
+
+上游 `opencode serve` 是独立子进程，可能崩溃、被 OOM 杀掉或静默退出。若桥接只是持有
+一个启动时的 backend 引用，进程死了它也不知情——会一直对外宣告一个死端点，所有请求
+报 `ECONNREFUSED`。本技能对齐 `dsh-opencode-xdbridge` 插件的做法：
+
+1. 给 `startBackend` 传 `onExit` 回调，上游一退出立刻感知；
+2. 运行时用 getter 取用而非缓存引用，重启后请求自动走新实例；
+3. **两处触发恢复**：子进程 exit 事件 + 请求遇到 `ECONNREFUSED`（覆盖"死了但 exit 尚未处理"的窗口）；
+4. **有界恢复**：默认最多 5 次、间隔 2 秒；上游稳定存活 60 秒则预算重置，
+   避免长跑进程被历史崩溃耗尽配额；
+5. 每次重启后**重写 `endpoint.json`**，模型清单保持准确。
+
+`/health` 字段含义：
+
+| 字段 | 含义 |
+| --- | --- |
+| `ok` | 上游可用（= `upstreamAlive`） |
+| `bridge` | 桥接进程本身活着（恒 true） |
+| `upstreamAlive` | 上游 opencode 运行时是否可服务 |
+| `recovering` | 是否正在自动恢复（瞬时状态，重试即可） |
+| `restarts` | 已用掉的恢复次数（稳定 60 秒后归零） |
 
 ## 默认流程
 
@@ -102,11 +186,14 @@ FreeTierError: OpenCode's free tier can only be used from within OpenCode
 node <skill>/scripts/bridge.mjs &
 # 等待就绪（首次解析/下载 opencode 可能较久）
 until [ -f ~/.workbuddy/opencode-bridge/endpoint.json ]; do sleep 2; done
-curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:3199/health   # {"ok":true,"models":N}
+curl -s --noproxy '*' -H "Authorization: Bearer <token>" http://127.0.0.1:3199/health
+# → {"ok":true,"bridge":true,"models":N,"upstreamAlive":true,"recovering":false,"restarts":0}
 ```
 
 - 端口默认 `3199`，token 默认固定值；用 `OPENCODE_BRIDGE_PORT` / `OPENCODE_BRIDGE_TOKEN` 覆盖。
 - 就绪后 `~/.workbuddy/opencode-bridge/endpoint.json` 会写入端点、apiKey 与模型清单。
+- **curl 测试请加 `--noproxy '*'`**：环境若设了 `HTTP_PROXY`，请求可能被系统代理吞掉，
+  报 `upstream connect failed: Connection refused`（那是代理的错，不是桥接的）。
 
 ### Step 2：把模型写入 WorkBuddy
 
@@ -144,9 +231,27 @@ curl -s -X POST http://127.0.0.1:3199/v1/chat/completions \
 
 ## 成功标准
 
-1. `/health` 返回 `{"ok":true,"models":N}`（N ≥ 1）。
+1. `/health` 返回 `ok:true` 且 `upstreamAlive:true`（`models` ≥ 1）。
 2. `verify.mjs` 输出 `整体可用: true`。
 3. 重启 WorkBuddy 后，模型选择器出现这些 `OpenCode ·` 模型，选一个能正常回复。
+4. 杀掉上游 opencode 进程后，约 20 秒内 `restarts` 自增且 `ok` 回到 `true`（上游自愈生效）。
+5. 杀掉整个桥接进程后，跑 `node scripts/doctor.mjs` 能自动拉起并恢复可用
+   （桥接自愈生效，无需人工干预）。
+
+## 环境变量一览
+
+| 变量 | 默认 | 作用 |
+| --- | --- | --- |
+| `OPENCODE_BRIDGE_PORT` | `3199` | 对外监听端口 |
+| `OPENCODE_BRIDGE_TOKEN` | 固定值 | Bearer 鉴权 token |
+| `OPENCODE_BRIDGE_BINARY` | 自动探测 | 指定 opencode 二进制 |
+| `OPENCODE_BRIDGE_NO_DOWNLOAD` | 未设 | `=1` 只使用本机 opencode，找不到即退出 |
+| `OPENCODE_BRIDGE_MAX_RESTARTS` | `5` | 自动恢复预算；稳定 60 秒后重置 |
+| `OPENCODE_BRIDGE_EXIT_ON_FAILURE` | 未设 | `=1` 恢复耗尽后退出，交给守护进程（launchd KeepAlive）拉起 |
+| `OPENCODE_BRIDGE_START_TIMEOUT_MS` | `300000` | `doctor.mjs` 等待冷启动的上限（首次可能要下载 opencode） |
+| `OPENCODE_BRIDGE_PLUGIN_LIB` | 自动探测 | 指定插件核心模块目录 |
+| `OPENCODE_BRIDGE_HOME` | `~/.workbuddy/opencode-bridge` | 状态目录 |
+| `WORKBUDDY_HOME` | `~/.workbuddy` | WorkBuddy 主目录（决定 models.json 位置） |
 
 ## 风险与禁忌
 
